@@ -1,0 +1,88 @@
+name: ServiceNow DevOps Demo CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build_and_test:
+    name: Build and Unit Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # 1. SIMULATE UNIT TESTS & GENERATE A REPORT
+      - name: Run Unit Tests
+        run: |
+          # This script creates a dummy JUnit XML report for the demo.
+          mkdir -p test-results
+          echo '<testsuites name="all-tests" tests="1" failures="0" time="1">' > test-results/results.xml
+          echo '  <testsuite name="hello-world-test" tests="1" failures="0" time="1">' >> test-results/results.xml
+          echo '    <testcase name="test_hello" classname="HelloWorld" time="1"/>' >> test-results/results.xml
+          echo '  </testsuite>' >> test-results/results.xml
+          echo '</testsuites>' >> test-results/results.xml
+
+      # 2. PUSH TEST RESULTS TO SERVICENOW
+      - name: ServiceNow DevOps - Send Test Results
+        uses: ServiceNow/servicenow-devops-test-report@v2.1.0
+        with:
+          instance-url: ${{ secrets.SN_INSTANCE_URL }}
+          devops-integration-user: ${{ secrets.SN_DEVOPS_USER }}
+          devops-integration-password: ${{ secrets.SN_DEVOPS_PASSWORD }}
+          tool-id: ${{ secrets.SN_ORCHESTRATION_TOOL_ID }}
+          context-github: ${{ toJSON(github) }}
+          job-name: ${{ github.job }}
+          report-type: 'junit'
+          report-path: 'test-results/results.xml'
+
+      # 3. SIMULATE CREATING AN ARTIFACT
+      - name: Create and Upload Artifact Package
+        run: |
+          # This simulates creating a deployable package.
+          mkdir -p artifact
+          echo "Build version ${{ github.run_number }}" > artifact/build-info.txt
+          echo "Deployed on $(date)" >> artifact/build-info.txt
+          tar -czf hello-world-package.tar.gz artifact
+      - uses: actions/upload-artifact@v3
+        with:
+          name: deploy-package
+          path: hello-world-package.tar.gz
+
+  deploy_to_prod:
+    name: Deploy to Production
+    needs: build_and_test # This job only runs if the build job is successful
+    runs-on: ubuntu-latest
+    steps:
+      # 4. CREATE THE SERVICENOW CHANGE REQUEST (AND WAIT FOR APPROVAL)
+      - name: ServiceNow DevOps - Create and Gate Change
+        id: createSNowChange
+        uses: ServiceNow/servicenow-devops-change@v6.1.0
+        with:
+          instance-url: ${{ secrets.SN_INSTANCE_URL }}
+          devops-integration-user: ${{ secrets.SN_DEVOPS_USER }}
+          devops-integration-password: ${{ secrets.SN_DEVOPS_PASSWORD }}
+          tool-id: ${{ secrets.SN_ORCHESTRATION_TOOL_ID }}
+          context-github: ${{ toJSON(github) }}
+          job-name: 'Deploy to Production'
+          # These parameters make the job wait for ServiceNow approval
+          interval: '120'  # Check for approval every 2 minutes
+          timeout: '3600'  # Fail if not approved within 1 hour
+          # Define the change request details
+          change-request: '{ "attributes": { "short_description": "Automated deployment from GitHub Actions", "assignment_group": "Application Development" } }'
+
+      - name: Change Request number
+        run: echo "Change Request is ${{ steps.createSNowChange.outputs.change-request-number }}"
+
+      # 5. PERFORM THE DEPLOYMENT (ONLY RUNS AFTER APPROVAL)
+      - name: Download package from build job
+        uses: actions/download-artifact@v3
+        with:
+          name: deploy-package
+      
+      - name: Perform Deployment
+        run: |
+          echo "Deployment started for Change ${{ steps.createSNowChange.outputs.change-request-number }}"
+          tar -xvf hello-world-package.tar.gz
+          cat artifact/build-info.txt
+          echo "Deployment successful."
