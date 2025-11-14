@@ -12,10 +12,10 @@ jobs:
     
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # Updated to v4
       
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4  # Updated to v4
         with:
           node-version: '18'
       
@@ -52,7 +52,7 @@ jobs:
           tar -czf app-${{ github.run_number }}.tar.gz dist/
       
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4  # ✅ Updated to v4
         with:
           name: application-package
           path: app-${{ github.run_number }}.tar.gz
@@ -64,10 +64,10 @@ jobs:
     
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # Updated to v4
       
       - name: Download Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4  # ✅ Updated to v4
         with:
           name: application-package
       
@@ -102,7 +102,7 @@ jobs:
     
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # Updated to v4
       
       # Register Orchestration Step (triggers change creation)
       - name: Register Orchestration Step
